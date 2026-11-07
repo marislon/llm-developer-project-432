@@ -7,9 +7,14 @@ retry-политика, таймаут, различие ошибок 429/5xx/4x
 import asyncio
 import random
 
-from agents import Agent, Runner
+from agents import (
+    Agent,
+    Runner,
+    set_default_openai_api,
+    set_default_openai_client,
+    set_tracing_disabled,
+)
 from openai import APIConnectionError, APIStatusError, APITimeoutError, AsyncOpenAI
-from agents import set_default_openai_api, set_default_openai_client, set_tracing_disabled
 
 from app.core.config import settings
 from app.core.logging import get_logger

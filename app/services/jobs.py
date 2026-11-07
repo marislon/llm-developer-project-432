@@ -20,19 +20,26 @@ def create_job(
     conn: psycopg.Connection,
     payload: dict,
     idempotency_key: str | None,
-) -> str:
+) -> tuple[str, bool]:
     """Создаёт задачу или возвращает ID существующей."""
 
     with conn.cursor() as cur:
         if idempotency_key:
             cur.execute(
-                "SELECT id FROM jobs WHERE idempotency_key = %s",
+                "SELECT id, payload FROM jobs WHERE idempotency_key = %s",
                 (idempotency_key,),
             )
             row = cur.fetchone()
 
             if row:
-                return row[0]
+                existing_id, existing_payload = row
+
+                if existing_payload != payload:
+                    raise ValueError(
+                        "Idempotency-Key уже используется с другими данными"
+                    )
+
+                return existing_id, False
 
         job_id = uuid.uuid4().hex[:12]
 
@@ -42,7 +49,7 @@ def create_job(
             (job_id, idempotency_key, json.dumps(payload)),
         )
 
-        return job_id
+        return job_id, True
 
 def set_status(
     conn: psycopg.Connection,
@@ -76,11 +83,6 @@ def set_status(
         )
 
 
-def get_job(conn: psycopg.Connection, job_id: str) -> dict | None:
-    # TODO(шаг 2): SELECT id, status, attempts, result, error FROM jobs WHERE id = %s.
-    #   Нет строки → None. result может быть dict (psycopg3 JSONB!) —
-    #   CardDraft.model_validate(row) для dict, model_validate_json(row) для строки.
-    raise NotImplementedError("get_job")
 
 def get_job(conn: psycopg.Connection, job_id: str) -> dict | None:
     """Возвращает информацию о задании по его ID."""

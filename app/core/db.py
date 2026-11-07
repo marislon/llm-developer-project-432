@@ -1,6 +1,20 @@
 import psycopg
+from psycopg_pool import ConnectionPool
 
 from app.core.config import settings
+
+_db_pool = ConnectionPool(
+    conninfo=settings.database_url,
+    min_size=1,
+    max_size=5,
+    open=False,
+)
+
+def pool() -> ConnectionPool:
+    return _db_pool
+
+def connection():
+    return pool().connection()
 
 _schema = """
 CREATE TABLE IF NOT EXISTS jobs (

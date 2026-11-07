@@ -18,4 +18,4 @@ celery_app.conf.update(
     task_reject_on_worker_lost=True,  # упал воркер → сообщение вернётся в очередь
 )
 
-import app.workers.tasks  # noqa: E402,F401
+import app.workers.tasks  # noqa: F401

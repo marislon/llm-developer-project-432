@@ -1,7 +1,6 @@
 """Temporal-вариант через FastAPI: старт workflow, статус, сигналы."""
-import uuid
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from temporalio.client import Client
 
 from app.core.config import settings

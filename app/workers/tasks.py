@@ -14,7 +14,6 @@ import asyncio
 
 from app.core.db import connect
 from app.core.logging import get_logger
-from app.schemas import CardDraft, SupplierFacts
 from app.services import jobs as jobs_repo
 from app.services import steps
 from app.workers.celery_app import celery_app

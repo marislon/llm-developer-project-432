@@ -1,41 +1,42 @@
 """Фоновый вариант: job в RabbitMQ → Celery-воркер (шаги 2-3 практики)."""
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import JSONResponse
 
-from app.core.db import connect
+from app.core.db import connection
 from app.schemas import JobIn
 from app.services import jobs as jobs_repo
 from app.workers.celery_app import celery_app
-
-from fastapi import HTTPException
 
 router = APIRouter(tags=["jobs"])
 
 
 @router.post("/jobs", status_code=202)
-async def create_job(
+def create_job(
     body: JobIn,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
-    conn = connect()
     try:
-        job_id = jobs_repo.create_job(
-            conn,
-            {"supplier_text": body.supplier_text},
-            idempotency_key,
-        )
-        conn.commit()
-    finally:
-        conn.close()
+        with connection() as conn:
+            job_id, created = jobs_repo.create_job(
+                conn,
+                {"supplier_text": body.supplier_text},
+                idempotency_key,
+            )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=str(exc),
+        ) from exc
 
-    celery_app.send_task(
-        "app.workers.tasks.generate_card",
-        kwargs={
-            "job_id": job_id,
-            "supplier_text": body.supplier_text,
-        },
-        queue="card.generate",
-    )
+    if created:
+        celery_app.send_task(
+            "app.workers.tasks.generate_card",
+            kwargs={
+                "job_id": job_id,
+                "supplier_text": body.supplier_text,
+            },
+            queue="card.generate",
+        )
 
     return JSONResponse(
         {"id": job_id, "status": "pending"},
@@ -44,13 +45,9 @@ async def create_job(
 
 
 @router.get("/jobs/{job_id}")
-@router.get("/jobs/{job_id}")
-async def get_job(job_id: str):
-    conn = connect()
-    try:
+def get_job(job_id: str):
+    with connection() as conn:
         job = jobs_repo.get_job(conn, job_id)
-    finally:
-        conn.close()
 
     if job is None:
         raise HTTPException(

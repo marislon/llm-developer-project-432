@@ -1,13 +1,17 @@
 """Точка входа Temporal-воркера: регистрирует workflows + activities."""
 import asyncio
 
+from app.temporal.workflows import CardWorkflow
 from temporalio.client import Client
 from temporalio.worker import Worker
 
 from app.core.config import settings
 from app.core.logging import get_logger, setup_logging
-from app.temporal.activities import critique_activity, extract_activity, generate_activity
-from app.temporal.workflows import CardWorkflow
+from app.temporal.activities import (
+    critique_activity,
+    extract_activity,
+    generate_activity,
+)
 
 log = get_logger(__name__)
 
