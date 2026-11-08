@@ -2,9 +2,8 @@
 from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import JSONResponse
 
-from app.core.db import connection
+from app.repositories import jobs as jobs_repo
 from app.schemas import JobIn
-from app.services import jobs as jobs_repo
 from app.workers.celery_app import celery_app
 
 router = APIRouter(tags=["jobs"])
@@ -16,12 +15,10 @@ def create_job(
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
     try:
-        with connection() as conn:
-            job_id, created = jobs_repo.create_job(
-                conn,
-                {"supplier_text": body.supplier_text},
-                idempotency_key,
-            )
+        job_id, created = jobs_repo.create_job_with_connection(
+            {"supplier_text": body.supplier_text},
+            idempotency_key,
+        )
     except ValueError as exc:
         raise HTTPException(
             status_code=409,
@@ -46,8 +43,7 @@ def create_job(
 
 @router.get("/jobs/{job_id}")
 def get_job(job_id: str):
-    with connection() as conn:
-        job = jobs_repo.get_job(conn, job_id)
+    job = jobs_repo.get_job_by_id(job_id)
 
     if job is None:
         raise HTTPException(

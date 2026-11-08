@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 
 import psycopg
 
+from app.core.db import connection
 from app.schemas import CardDraft
 
 
@@ -45,11 +46,34 @@ def create_job(
 
         cur.execute(
             "INSERT INTO jobs (id, idempotency_key, payload) "
-            "VALUES (%s, %s, %s)",
+            "VALUES (%s, %s, %s) "
+            "ON CONFLICT (idempotency_key) DO NOTHING "
+            "RETURNING id",
             (job_id, idempotency_key, json.dumps(payload)),
         )
 
-        return job_id, True
+        inserted = cur.fetchone()
+
+        if inserted is not None:
+            return inserted[0], True
+
+        cur.execute(
+            "SELECT id, payload FROM jobs WHERE idempotency_key = %s",
+            (idempotency_key,),
+        )
+        row = cur.fetchone()
+
+        if row is None:
+            raise RuntimeError("Не удалось найти задание после конфликта ключа")
+
+        existing_id, existing_payload = row
+
+        if existing_payload != payload:
+            raise ValueError(
+                "Idempotency-Key уже используется с другими данными"
+            )
+
+        return existing_id, False
 
 def set_status(
     conn: psycopg.Connection,
@@ -119,3 +143,30 @@ def get_job(conn: psycopg.Connection, job_id: str) -> dict | None:
         "created_at": row[5],
         "updated_at": row[6],
     }
+
+def get_job_by_id(job_id: str) -> dict | None:
+    with connection() as conn:
+        return get_job(conn, job_id)
+
+def create_job_with_connection(
+    payload: dict,
+    idempotency_key: str | None,
+) -> tuple[str, bool]:
+    with connection() as conn:
+        return create_job(conn, payload, idempotency_key)
+
+def update_job_status(
+    job_id: str,
+    status: str,
+    *,
+    result: CardDraft | None = None,
+    error: str | None = None,
+) -> None:
+    with connection() as conn:
+        set_status(
+            conn,
+            job_id,
+            status,
+            result=result,
+            error=error,
+        )

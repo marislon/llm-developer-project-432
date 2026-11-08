@@ -70,3 +70,32 @@ critic_agent = Agent(
     model_settings=_MODEL_SETTINGS,
     output_type=AgentOutputSchema(CritiqueReport, strict_json_schema=False),
 )
+
+def extractor_prompt(supplier_text: str) -> str:
+    """Подготовить текст поставщика для извлечения фактов."""
+    return supplier_text
+
+def generator_prompt(
+    facts: SupplierFacts,
+    feedback: list[str] | None = None,
+) -> str:
+    """Сформировать запрос для генерации карточки товара."""
+    prompt = "Факты о товаре:\n" + facts.model_dump_json(indent=2)
+
+    if feedback:
+        prompt += "\n\nЗамечания критика, учти:\n"
+        prompt += "\n".join(f"- {issue}" for issue in feedback)
+
+    return prompt
+
+def critic_prompt(
+    facts: SupplierFacts,
+    draft: CardDraft,
+) -> str:
+    """Сформировать запрос для проверки карточки товара."""
+    return (
+        "Факты о товаре:\n"
+        + facts.model_dump_json(indent=2)
+        + "\n\nЧерновик карточки для проверки:\n"
+        + draft.model_dump_json(indent=2)
+    )

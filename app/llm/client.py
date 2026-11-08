@@ -56,7 +56,7 @@ def _retryable(exc: Exception) -> bool:
     # TODO(шаг 1): isinstance-проверки:
     #   APIConnectionError, APITimeoutError -> True
     #   APIStatusError -> status_code == 429 или >= 500
-    if isinstance(exc, (APIConnectionError, APITimeoutError)):
+    if isinstance(exc, (APIConnectionError, APITimeoutError, TimeoutError)):
         return True
 
     if isinstance(exc, APIStatusError):

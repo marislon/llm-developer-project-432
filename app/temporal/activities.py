@@ -8,6 +8,7 @@ import json
 
 from temporalio import activity
 
+from app.repositories import jobs as jobs_repo
 from app.schemas import CardDraft, SupplierFacts
 from app.services import steps
 
@@ -32,3 +33,21 @@ async def critique_activity(facts_json: str, draft_json: str) -> str:
     draft = CardDraft.model_validate_json(draft_json)
     report = await steps.critique(facts, draft)
     return report.model_dump_json()
+
+@activity.defn
+def update_job_status_activity(
+    job_id: str,
+    status: str,
+    result_json: str | None = None,
+) -> None:
+    result = (
+        CardDraft.model_validate_json(result_json)
+        if result_json is not None
+        else None
+    )
+
+    jobs_repo.update_job_status(
+        job_id,
+        status,
+        result=result,
+    )

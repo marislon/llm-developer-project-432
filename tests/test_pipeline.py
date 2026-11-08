@@ -5,7 +5,7 @@ import pytest
 
 from app.llm import client as llm_client
 from app.schemas import CardDraft, CritiqueReport, SupplierFacts
-from app.services import steps
+from app.services import pipeline, steps
 
 
 def _facts() -> SupplierFacts:
@@ -50,7 +50,7 @@ def test_extract_parses_json_with_markdown_fencing(fake_llm):
 
 def test_pipeline_approves_on_first_critique(fake_llm):
     fake_llm["scenario"] += [_facts(), _draft(), CritiqueReport(verdict="approve")]
-    draft, attempts, verdict = asyncio.run(steps.run_pipeline("текст"))
+    draft, attempts, verdict = asyncio.run(pipeline.run_pipeline("текст"))
     assert verdict == "approved"
     assert attempts == 1
     assert draft.title.startswith("МиксерПро")
@@ -63,7 +63,7 @@ def test_pipeline_regenerates_until_max_attempts(fake_llm):
         _draft(), CritiqueReport(verdict="regenerate", issues=["много воды"]),
         _draft(), CritiqueReport(verdict="regenerate", issues=["всё ещё вода"]),
     ]
-    draft, attempts, verdict = asyncio.run(steps.run_pipeline("текст", max_attempts=3))
+    draft, attempts, verdict = asyncio.run(pipeline.run_pipeline("текст", max_attempts=3))
     assert verdict == "rejected"
     assert attempts == 3
     assert draft is not None
