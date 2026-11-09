@@ -3,6 +3,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
 from temporalio.client import Client
+from temporalio.exceptions import ApplicationError
 from temporalio.worker import Worker
 
 from app.core.config import settings
@@ -30,6 +31,7 @@ async def main():
             task_queue=settings.temporal_task_queue,
             activity_executor=executor,
             workflows=[CardWorkflow],
+            workflow_failure_exception_types=[ApplicationError],
             activities=[
                 extract_activity,
                 generate_activity,

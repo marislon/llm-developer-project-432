@@ -1,17 +1,5 @@
 import pytest
 
-from app.core.db import pool
-
-
-@pytest.fixture(scope="module")
-def db_pool():
-    p = pool()
-    p.open()
-    p.wait()
-    try:
-        yield p
-    finally:
-        p.close()
 
 def test_create_job(db_pool):
     from app.repositories.jobs import (
