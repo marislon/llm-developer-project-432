@@ -47,6 +47,12 @@ def test_update_job_status(db_pool):
 
         assert job is not None
         assert job["status"] == "extracting"
+        update_job_status(job_id, "waiting_for_human")
+
+        job = get_job_by_id(job_id)
+
+        assert job is not None
+        assert job["status"] == "waiting_for_human"
     finally:
         with db_pool.connection() as conn:
             conn.execute(

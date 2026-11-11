@@ -7,6 +7,7 @@ from temporalio.exceptions import ApplicationError
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
+from app.core.config import settings
 from app.repositories import jobs as jobs_repo
 from app.temporal.activities import update_job_status_activity
 from app.temporal.workflows import CardWorkflow
@@ -45,7 +46,12 @@ async def test_workflow_fails_on_extract_error(db_pool):
             ):
                 handle = await env.client.start_workflow(
                     CardWorkflow.run,
-                    args=["Тестовое описание товара", 3, job_id],
+                    args=[
+                        "Тестовое описание товара",
+                        3,
+                        job_id,
+                        settings.confidence_threshold,
+                    ],
                     id=f"card-integration-extract-failure-{job_id}",
                     task_queue="card-integration-test",
                 )

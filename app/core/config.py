@@ -1,3 +1,4 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,6 +17,6 @@ class Settings(BaseSettings):
 
     llm_timeout_s: float = 120.0
     llm_max_retries: int = 3
-
+    confidence_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
 
 settings = Settings()

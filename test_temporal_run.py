@@ -1,4 +1,5 @@
 import asyncio
+
 from temporalio.client import Client
 
 from app.temporal.workflows import CardWorkflow

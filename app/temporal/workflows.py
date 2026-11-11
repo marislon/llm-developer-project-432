@@ -22,6 +22,7 @@ class CardWorkflow:
             supplier_text: str,
             max_attempts: int = 3,
             job_id: str | None = None,
+            confidence_threshold: float = 0.7,
     ) -> str:
         if job_id is not None:
             await workflow.execute_activity(
@@ -111,10 +112,17 @@ class CardWorkflow:
             report = json.loads(report_json)
 
             if report["verdict"] == "approve":
+                draft = json.loads(draft_json)
+
+                status = (
+                    "waiting_for_human"
+                    if draft["confidence"] < confidence_threshold
+                    else "approved"
+                )
                 if job_id is not None:
                     await workflow.execute_activity(
                         update_job_status_activity,
-                        args=[job_id, "approved", draft_json],
+                        args=[job_id, status, draft_json],
                         start_to_close_timeout=timedelta(seconds=30),
                         retry_policy=RetryPolicy(maximum_attempts=3),
                     )

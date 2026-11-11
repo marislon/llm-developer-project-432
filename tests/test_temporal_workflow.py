@@ -108,3 +108,88 @@ async def test_critique_failure_updates_job_status():
         "test-job",
         "failed",
     ]
+def test_confidence_threshold():
+    threshold = 0.7
+
+    low_confidence = 0.6
+    high_confidence = 0.8
+
+    assert (
+        "waiting_for_human"
+        if low_confidence < threshold
+        else "approved"
+    ) == "waiting_for_human"
+
+    assert (
+        "waiting_for_human"
+        if high_confidence < threshold
+        else "approved"
+    ) == "approved"
+
+@pytest.mark.anyio
+async def test_low_confidence_waits_for_human():
+    workflow = CardWorkflow()
+
+    draft_json = '{"title": "Товар", "confidence": 0.6}'
+
+    with patch(
+        "app.temporal.workflows.workflow.execute_activity",
+        new_callable=AsyncMock,
+    ) as execute:
+        execute.side_effect = [
+            None,                       # extracting
+            '{"product_name": "Товар"}', # extract_activity
+            None,                       # generating
+            draft_json,                 # generate_activity
+            None,                       # critiquing
+            '{"verdict": "approve"}',   # critique_activity
+            None,                       # Сохранение статуса
+        ]
+
+        result = await workflow.run(
+            "текст поставщика",
+            job_id="test-job",
+            confidence_threshold=0.7,
+        )
+
+    assert result == draft_json
+    assert execute.call_count == 7
+    assert execute.call_args.kwargs["args"] == [
+        "test-job",
+        "waiting_for_human",
+        draft_json,
+    ]
+
+@pytest.mark.anyio
+async def test_high_confidence_is_approved():
+    workflow = CardWorkflow()
+
+    draft_json = '{"title": "Товар", "confidence": 0.8}'
+
+    with patch(
+        "app.temporal.workflows.workflow.execute_activity",
+        new_callable=AsyncMock,
+    ) as execute:
+        execute.side_effect = [
+            None,                       # extracting
+            '{"product_name": "Товар"}', # extract_activity
+            None,                       # generating
+            draft_json,                 # generate_activity
+            None,                       # critiquing
+            '{"verdict": "approve"}',   # critique_activity
+            None,                       # Сохранение статуса
+        ]
+
+        result = await workflow.run(
+            "текст поставщика",
+            job_id="test-job",
+            confidence_threshold=0.7,
+        )
+
+    assert result == draft_json
+    assert execute.call_count == 7
+    assert execute.call_args.kwargs["args"] == [
+        "test-job",
+        "approved",
+        draft_json,
+    ]

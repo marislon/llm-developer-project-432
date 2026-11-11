@@ -21,6 +21,7 @@ def _draft(title="МиксерПро 800 — блендер 800 Вт") -> CardDr
         description="Погружной блендер с металлической ножкой и турбо-режимом.",
         characteristics={"Мощность": "800 Вт"},
         benefits=["Металлическая ножка", "6 скоростей"],
+        confidence=0.8,
     )
 
 
@@ -49,7 +50,7 @@ def test_extract_parses_json_with_markdown_fencing(fake_llm):
 
 
 def test_pipeline_approves_on_first_critique(fake_llm):
-    fake_llm["scenario"] += [_facts(), _draft(), CritiqueReport(verdict="approve")]
+    fake_llm["scenario"] += [_facts(), _draft().model_dump_json(), CritiqueReport(verdict="approve")]
     draft, attempts, verdict = asyncio.run(pipeline.run_pipeline("текст"))
     assert verdict == "approved"
     assert attempts == 1
@@ -59,9 +60,9 @@ def test_pipeline_approves_on_first_critique(fake_llm):
 def test_pipeline_regenerates_until_max_attempts(fake_llm):
     fake_llm["scenario"] += [
         _facts(),
-        _draft(), CritiqueReport(verdict="regenerate", issues=["заголовок длинный"]),
-        _draft(), CritiqueReport(verdict="regenerate", issues=["много воды"]),
-        _draft(), CritiqueReport(verdict="regenerate", issues=["всё ещё вода"]),
+        _draft().model_dump_json(), CritiqueReport(verdict="regenerate", issues=["заголовок длинный"]),
+        _draft().model_dump_json(), CritiqueReport(verdict="regenerate", issues=["много воды"]),
+        _draft().model_dump_json(), CritiqueReport(verdict="regenerate", issues=["всё ещё вода"]),
     ]
     draft, attempts, verdict = asyncio.run(pipeline.run_pipeline("текст", max_attempts=3))
     assert verdict == "rejected"
@@ -134,3 +135,34 @@ def test_run_agent_no_retry_on_4xx(monkeypatch):
 def test_retryable_classification():
     assert llm_client._retryable(Exception("x")) is False
     assert llm_client._retryable(ValueError("x")) is False
+
+def test_pipeline_sparse_supplier_data(fake_llm):
+    facts = SupplierFacts(
+        product_name="Блендер",
+        characteristics={},
+        missing_fields=["Мощность", "Гарантия"],
+    )
+
+    draft = CardDraft(
+        title="Блендер",
+        description="Блендер с неуточнёнными характеристиками.",
+        characteristics={},
+        benefits=[],
+        missing_fields=["Мощность", "Гарантия"],
+        confidence=0.4,
+    )
+
+    fake_llm["scenario"] += [
+        facts,
+        draft.model_dump_json(),
+        CritiqueReport(verdict="approve"),
+    ]
+
+    result, attempts, verdict = asyncio.run(
+        pipeline.run_pipeline("Блендер")
+    )
+
+    assert result.missing_fields
+    assert result.confidence < 0.7
+    assert attempts == 1
+    assert verdict == "approved"
