@@ -4,7 +4,7 @@ from fastapi import FastAPI, HTTPException
 
 from app.core.db import connection, pool
 from app.core.logging import setup_logging
-from app.routers import cards, jobs, workflows
+from app.routers import cards, documents, jobs, workflows
 
 
 @asynccontextmanager
@@ -22,6 +22,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="card-pipeline", lifespan=lifespan)
 app.include_router(cards.router)
+app.include_router(documents.router)
 app.include_router(jobs.router)
 app.include_router(workflows.router)
 
