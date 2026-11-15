@@ -8,10 +8,27 @@ from app.repositories.fragments import create_fragment
 
 
 def test_create_fragment():
-    document_id = "7bf89fb4-1d2c-41e2-bdbd-00b25c7c0225"
+    document_id = str(uuid.uuid4())
     fragment_id = str(uuid.uuid4())
 
     with psycopg.connect(settings.database_url) as conn:
+        conn.execute(
+            """
+            INSERT INTO documents (
+                id, filename, ext, size_bytes, sha256, storage_path, status
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                document_id,
+                "test_fragment.docx",
+                ".docx",
+                100,
+                uuid.uuid4().hex,
+                "data/test_fragment.docx",
+                "new",
+            ),
+        )
         try:
             create_fragment(
                 conn=conn,
