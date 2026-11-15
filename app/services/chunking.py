@@ -5,7 +5,7 @@ from dataclasses import dataclass
 @dataclass
 class Chunk:
     text: str
-    document_id: int
+    document_id: str
     page: int
     section: str
     chunk_index: int
@@ -64,7 +64,7 @@ def find_word_boundary(text: str, position: int) -> int:
 
 def create_table_chunk(
     text: str,
-    document_id: int,
+    document_id: str,
     page: int,
     section: str,
     chunk_index: int,
@@ -80,7 +80,7 @@ def create_table_chunk(
 
 def create_text_chunks(
     text: str,
-    document_id: int,
+    document_id: str,
     page: int,
     section: str,
     chunk_size: int = 500,

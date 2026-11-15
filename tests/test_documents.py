@@ -10,12 +10,24 @@ from fastapi.testclient import TestClient
 from app.core.config import settings
 from app.main import app
 from app.repositories.documents import update_document_status
-
+from contextlib import asynccontextmanager
 
 @pytest.fixture
 def client(db_pool):
-    with TestClient(app) as test_client:
-        yield test_client
+    original_lifespan = app.router.lifespan_context
+
+    @asynccontextmanager
+    async def test_lifespan(app):
+        yield
+
+    app.router.lifespan_context = test_lifespan
+
+    try:
+        with TestClient(app) as test_client:
+            yield test_client
+    finally:
+        app.router.lifespan_context = original_lifespan
+
 
 def test_concurrent_document_upload(client, db_pool):
     content = f"Тестовый документ {uuid4()}".encode()
@@ -73,7 +85,7 @@ def test_concurrent_document_upload(client, db_pool):
             Path(storage_path).unlink(missing_ok=True)
 
 
-def test_update_document_status(db_pool):
+def test_update_document_status():
     with psycopg.connect(settings.database_url) as conn:
         document_id = str(uuid4())
 
