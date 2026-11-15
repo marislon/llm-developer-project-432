@@ -1,5 +1,6 @@
 import psycopg
 
+
 def get_document_by_hash(
     conn: psycopg.Connection,
     sha256: str,
@@ -82,3 +83,22 @@ def count_fragments(
         row = cur.fetchone()
 
     return row[0]
+
+
+def update_document_status(
+    conn: psycopg.Connection,
+    document_id: str,
+    status: str,
+    error: str | None = None,
+) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE documents
+            SET status = %s,
+                error = %s,
+                updated_at = now()
+            WHERE id = %s
+            """,
+            (status, error, document_id),
+        )
