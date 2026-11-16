@@ -10,6 +10,7 @@ with workflow.unsafe.imports_passed_through():
         critique_activity,
         extract_activity,
         generate_activity,
+        process_document_activity,
         update_job_status_activity,
     )
 
@@ -131,3 +132,18 @@ class CardWorkflow:
             feedback_json = json.dumps(
                 report["issues"], ensure_ascii=False
             )
+
+@workflow.defn
+class DocumentWorkflow:
+    @workflow.run
+    async def run(
+        self,
+        document_id: str,
+        file_path: str,
+    ) -> int:
+        return await workflow.execute_activity(
+            process_document_activity,
+            args=[document_id, file_path],
+            start_to_close_timeout=timedelta(seconds=180),
+            retry_policy=RetryPolicy(maximum_attempts=3),
+        )

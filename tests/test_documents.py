@@ -1,5 +1,6 @@
 import hashlib
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import uuid4
 
@@ -10,7 +11,7 @@ from fastapi.testclient import TestClient
 from app.core.config import settings
 from app.main import app
 from app.repositories.documents import update_document_status
-from contextlib import asynccontextmanager
+
 
 @pytest.fixture
 def client(db_pool):
@@ -242,9 +243,11 @@ def test_text_pdf_processing(db_pool):
             )
 
 def test_xlsx_long_row_not_split(db_pool):
-    from app.services.documents import process_document
-    from openpyxl import Workbook
     from tempfile import TemporaryDirectory
+
+    from openpyxl import Workbook
+
+    from app.services.documents import process_document
 
     document_id = str(uuid4())
 
@@ -303,3 +306,41 @@ def test_xlsx_long_row_not_split(db_pool):
                     "DELETE FROM documents WHERE id = %s",
                     (document_id,),
                 )
+def test_docx_text_and_table_preserved():
+    from app.parsers.docx import parse_docx
+
+    file_path = Path("data/blender_kp.docx")
+    assert file_path.exists()
+
+    blocks = parse_docx(str(file_path))
+
+    paragraphs = [
+        block for block in blocks
+        if block.section == "paragraph"
+    ]
+    table_rows = [
+        block for block in blocks
+        if block.section == "table"
+    ]
+
+    assert len(paragraphs) > 0
+    assert len(table_rows) > 0
+
+    assert all(block.text.strip() for block in blocks)
+    assert all(block.page == 1 for block in blocks)
+
+    assert all(
+        ":" in block.text
+        for block in table_rows
+    )
+    expected_rows = [
+        ("BLD-500", "МиксерПро 500", "500 Вт", "белый", "1 490 ₽"),
+        ("BLD-800", "МиксерПро 800", "800 Вт", "графитовый", "2 190 ₽"),
+        ("BLD-1200", "МиксерПро 1200", "1200 Вт", "чёрный", "3 450 ₽"),
+    ]
+
+    assert len(table_rows) == len(expected_rows)
+
+    for block, expected in zip(table_rows, expected_rows):
+        for value in expected:
+            assert value in block.text

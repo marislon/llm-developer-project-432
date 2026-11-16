@@ -1,13 +1,13 @@
-from fastapi import APIRouter, File, HTTPException, UploadFile
-from pathlib import Path
-
+import hashlib
 import shutil
+from pathlib import Path
 from uuid import uuid4
+
+from fastapi import APIRouter, File, HTTPException, UploadFile
+from psycopg.errors import UniqueViolation
+
 from app.core.db import connection
 from app.repositories import documents as documents_repo
-
-import hashlib
-from psycopg.errors import UniqueViolation
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".xlsx"}

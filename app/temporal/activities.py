@@ -11,6 +11,7 @@ from temporalio import activity
 from app.repositories import jobs as jobs_repo
 from app.schemas import CardDraft, SupplierFacts
 from app.services import steps
+from app.services.documents import process_document
 
 
 @activity.defn
@@ -51,3 +52,10 @@ def update_job_status_activity(
         status,
         result=result,
     )
+
+@activity.defn
+def process_document_activity(
+    document_id: str,
+    file_path: str,
+) -> int:
+    return process_document(document_id, file_path)
