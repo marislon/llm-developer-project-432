@@ -8,7 +8,7 @@ from app.parsers.pdf import parse_pdf
 from app.parsers.xlsx import parse_xlsx
 from app.repositories.documents import update_document_status
 from app.repositories.fragments import create_fragment
-from app.services.chunking import create_text_chunks
+from app.services.chunking import create_table_chunk, create_text_chunks
 from app.services.normalizer import (
     find_repeated_lines,
     normalize_text,
@@ -66,6 +66,18 @@ def process_document(document_id: str, file_path: str):
     with connection() as conn:
         update_document_status(conn, document_id, "parsing")
     blocks = parse_document(file_path)
+    if (
+        Path(file_path).suffix.lower() == ".pdf"
+        and not any(block.text.strip() for block in blocks)
+    ):
+        with connection() as conn:
+            update_document_status(
+                conn,
+                document_id,
+                "rejected",
+                error="PDF не содержит извлекаемого текста (возможно, скан)",
+            )
+        return 0
     repeated_lines = set()
 
     if Path(file_path).suffix.lower() == ".pdf":
@@ -77,13 +89,26 @@ def process_document(document_id: str, file_path: str):
         text = remove_repeated_lines(
             block.text, repeated_lines
         )
-        chunks = prepare_chunks(
-            text=text,
-            document_id=document_id,
-            page=block.page,
-            section=getattr(block, "section", "page"),
-            start_index=len(all_chunks),
-        )
+        if Path(file_path).suffix.lower() == ".xlsx" or (
+            getattr(block, "section", "") == "table"
+        ):
+            chunks = [
+                create_table_chunk(
+                    text=prepare_text(text),
+                    document_id=document_id,
+                    page=block.page,
+                    section=getattr(block, "section", "table"),
+                    chunk_index=len(all_chunks),
+                )
+            ] if prepare_text(text) else []
+        else:
+            chunks = prepare_chunks(
+                text=text,
+                document_id=document_id,
+                page=block.page,
+                section=getattr(block, "section", "page"),
+                start_index=len(all_chunks),
+            )
         all_chunks.extend(chunks)
     with connection() as conn:
         save_chunks(conn, all_chunks)

@@ -126,3 +126,180 @@ def test_update_document_status():
             assert row == ("parsing", None)
         finally:
             conn.rollback()
+def test_scanned_pdf_rejected(db_pool):
+    from app.services.documents import process_document
+
+    document_id = str(uuid4())
+    file_path = Path("data/boiler_scan.pdf")
+
+    assert file_path.exists()
+
+    with db_pool.connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO documents (
+                id, filename, ext, size_bytes,
+                sha256, storage_path
+            )
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """,
+            (
+                document_id,
+                file_path.name,
+                ".pdf",
+                file_path.stat().st_size,
+                uuid4().hex,
+                str(file_path),
+            ),
+        )
+
+    try:
+        count = process_document(document_id, str(file_path))
+
+        with db_pool.connection() as conn:
+            row = conn.execute(
+                """
+                SELECT status, error
+                FROM documents
+                WHERE id = %s
+                """,
+                (document_id,),
+            ).fetchone()
+
+        assert count == 0
+        assert row[0] == "rejected"
+        assert "не содержит извлекаемого текста" in row[1]
+
+    finally:
+        with db_pool.connection() as conn:
+            conn.execute(
+                "DELETE FROM documents WHERE id = %s",
+                (document_id,),
+            )
+
+def test_text_pdf_processing(db_pool):
+    from app.services.documents import process_document
+
+    document_id = str(uuid4())
+    file_path = Path("data/blender_passport.pdf")
+
+    assert file_path.exists()
+
+    with db_pool.connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO documents (
+                id, filename, ext, size_bytes,
+                sha256, storage_path
+            )
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """,
+            (
+                document_id,
+                file_path.name,
+                ".pdf",
+                file_path.stat().st_size,
+                uuid4().hex,
+                str(file_path),
+            ),
+        )
+
+    try:
+        count = process_document(document_id, str(file_path))
+
+        with db_pool.connection() as conn:
+            row = conn.execute(
+                """
+                SELECT status, error
+                FROM documents
+                WHERE id = %s
+                """,
+                (document_id,),
+            ).fetchone()
+
+            fragments = conn.execute(
+                """
+                SELECT ord, page, text
+                FROM fragments
+                WHERE document_id = %s
+                ORDER BY ord
+                """,
+                (document_id,),
+            ).fetchall()
+
+        assert count > 0
+        assert row == ("embedding", None)
+        assert len(fragments) == count
+        assert [f[0] for f in fragments] == list(range(count))
+        assert {f[1] for f in fragments} == {1, 2}
+        assert all(f[2].strip() for f in fragments)
+
+    finally:
+        with db_pool.connection() as conn:
+            conn.execute(
+                "DELETE FROM documents WHERE id = %s",
+                (document_id,),
+            )
+
+def test_xlsx_long_row_not_split(db_pool):
+    from app.services.documents import process_document
+    from openpyxl import Workbook
+    from tempfile import TemporaryDirectory
+
+    document_id = str(uuid4())
+
+    with TemporaryDirectory() as temp_dir:
+        file_path = Path(temp_dir) / "long_spec.xlsx"
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "Спецификация"
+        sheet.append(["Артикул", "Описание"])
+        sheet.append(["TEST-001", "Длинное описание " * 100])
+        workbook.save(file_path)
+        workbook.close()
+
+        with db_pool.connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO documents (
+                    id, filename, ext, size_bytes,
+                    sha256, storage_path
+                )
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    document_id,
+                    file_path.name,
+                    ".xlsx",
+                    file_path.stat().st_size,
+                    uuid4().hex,
+                    str(file_path),
+                ),
+            )
+
+        try:
+            count = process_document(document_id, str(file_path))
+
+            with db_pool.connection() as conn:
+                fragments = conn.execute(
+                    """
+                    SELECT text
+                    FROM fragments
+                    WHERE document_id = %s
+                    ORDER BY ord
+                    """,
+                    (document_id,),
+                ).fetchall()
+
+            assert count == 1
+            assert len(fragments) == 1
+            assert "TEST-001" in fragments[0][0]
+            assert fragments[0][0].count("Длинное описание") == 100
+
+        finally:
+            with db_pool.connection() as conn:
+                conn.execute(
+                    "DELETE FROM documents WHERE id = %s",
+                    (document_id,),
+                )
