@@ -18,5 +18,9 @@ class Settings(BaseSettings):
     llm_timeout_s: float = 120.0
     llm_max_retries: int = 3
     confidence_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
-
+    embedding_model: str = "google/embeddinggemma-300m"
+    embedding_dimension: int = Field(default=768, gt=0)
+    embedding_device: str = "cpu"
+    embedding_batch_size: int = Field(default=32, gt=0)
+    search_similarity_threshold: float = Field(default=0.25, ge=0.0, le=1.0)
 settings = Settings()

@@ -10,6 +10,7 @@ with workflow.unsafe.imports_passed_through():
         critique_activity,
         extract_activity,
         generate_activity,
+        index_document_activity,
         process_document_activity,
         update_job_status_activity,
     )
@@ -141,9 +142,19 @@ class DocumentWorkflow:
         document_id: str,
         file_path: str,
     ) -> int:
-        return await workflow.execute_activity(
+        fragments_count = await workflow.execute_activity(
             process_document_activity,
             args=[document_id, file_path],
             start_to_close_timeout=timedelta(seconds=180),
             retry_policy=RetryPolicy(maximum_attempts=3),
         )
+
+        if fragments_count > 0:
+            await workflow.execute_activity(
+                index_document_activity,
+                document_id,
+                start_to_close_timeout=timedelta(seconds=600),
+                retry_policy=RetryPolicy(maximum_attempts=3),
+            )
+
+        return fragments_count

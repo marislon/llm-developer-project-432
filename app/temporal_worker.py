@@ -13,6 +13,7 @@ from app.temporal.activities import (
     critique_activity,
     extract_activity,
     generate_activity,
+    index_document_activity,
     process_document_activity,
     update_job_status_activity,
 )
@@ -39,6 +40,7 @@ async def main():
                 critique_activity,
                 update_job_status_activity,
                 process_document_activity,
+                index_document_activity,
             ],
         )
         log.info("temporal_worker_started", task_queue=settings.temporal_task_queue)

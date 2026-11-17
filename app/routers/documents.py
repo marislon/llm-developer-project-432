@@ -5,7 +5,9 @@ from uuid import uuid4
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from psycopg.errors import UniqueViolation
+from temporalio.client import Client
 
+from app.core.config import settings
 from app.core.db import connection
 from app.repositories import documents as documents_repo
 
@@ -89,6 +91,15 @@ async def upload_document(file: UploadFile = File(...)):
             "document_id": existing_id,
             "status": "existing",
         }
+
+    client = await Client.connect(settings.temporal_host)
+
+    await client.start_workflow(
+        "DocumentWorkflow",
+        args=[document_id, str(file_path)],
+        id=f"document-{document_id}",
+        task_queue=settings.temporal_task_queue,
+    )
 
     return {
         "document_id": document_id,

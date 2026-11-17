@@ -9,3 +9,4 @@ celery>=5.4,<6
 temporalio>=1.14,<2
 structlog>=24.1
 psycopg-pool==3.3.3
+sentence-transformers>=5.2
