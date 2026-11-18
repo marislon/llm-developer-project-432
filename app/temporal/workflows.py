@@ -158,3 +158,21 @@ class DocumentWorkflow:
             )
 
         return fragments_count
+
+@workflow.defn
+class DocumentCardWorkflow:
+    """Генерация карточки товара по документам поставщика."""
+
+    @workflow.run
+    async def run(
+        self,
+        document_ids: list[str],
+        product_hint: str | None,
+        job_id: str,
+    ) -> None:
+        await workflow.execute_activity(
+            update_job_status_activity,
+            args=[job_id, "processing"],
+            start_to_close_timeout=timedelta(seconds=30),
+            retry_policy=RetryPolicy(maximum_attempts=3),
+        )

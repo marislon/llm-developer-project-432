@@ -111,3 +111,15 @@ class JobOut(BaseModel):
     attempts: int
     result: CardDraft | None = None
     error: str | None = None
+
+class DocumentGenerationIn(BaseModel):
+    """Входные данные для генерации карточки по документам."""
+
+    document_ids: list[str] = Field(
+        min_length=1,
+        description="Идентификаторы документов поставщика",
+    )
+    product_hint: str | None = Field(
+        default=None,
+        description="Необязательная подсказка о товаре",
+    )

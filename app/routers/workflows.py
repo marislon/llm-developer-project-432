@@ -1,10 +1,11 @@
 """Temporal-вариант через FastAPI: старт workflow, статус, сигналы."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Header, HTTPException
 from temporalio.client import Client
 
 from app.core.config import settings
-from app.schemas import JobIn
+from app.repositories import jobs as jobs_repo
+from app.schemas import DocumentGenerationIn
 
 router = APIRouter(tags=["workflows"])
 
@@ -14,12 +15,42 @@ async def _client() -> Client:
 
 
 @router.post("/workflows", status_code=202)
-async def start_workflow(body: JobIn):
-    # TODO(шаг 4): client.start_workflow("CardWorkflow", args=[body.supplier_text, 3],
-    #   id=f"card-{uuid.uuid4().hex[:12]}", task_queue=settings.temporal_task_queue)
-    #   → вернуть {"id": wf_id, "status": "started"}
-    raise NotImplementedError("start_workflow")
+async def start_workflow(
+    body: DocumentGenerationIn,
+    idempotency_key: str | None = Header(
+        default=None,
+        alias="Idempotency-Key",
+    ),
+):
+    try:
+        job_id, created = jobs_repo.create_job_with_connection(
+            body.model_dump(),
+            idempotency_key,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=str(exc),
+        ) from exc
 
+    if created:
+        client = await _client()
+
+        await client.start_workflow(
+            "DocumentCardWorkflow",
+            args=[
+                body.document_ids,
+                body.product_hint,
+                job_id,
+            ],
+            id=job_id,
+            task_queue=settings.temporal_task_queue,
+        )
+
+    return {
+        "id": job_id,
+        "status": "pending",
+    }
 
 @router.get("/workflows/{wf_id}")
 async def workflow_status(wf_id: str):
