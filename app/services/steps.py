@@ -19,6 +19,10 @@ from app.agents.prompts import (
     generator_agent,
     generator_prompt,
     healing_prompt,
+    rag_critic_agent,
+    rag_critic_prompt,
+    rag_generator_agent,
+    rag_generator_prompt,
 )
 from app.core.logging import get_logger
 from app.llm.client import run_agent
@@ -61,8 +65,20 @@ async def generate(
 
     original_prompt = generator_prompt(facts, feedback)
 
-    out = await run_agent(
+    return await _generate_with_healing(
         generator_agent,
+        original_prompt,
+    )
+
+
+async def _generate_with_healing(
+        agent,
+        original_prompt: str,
+) -> CardDraft:
+    """Генерация карточки с исправлением ошибок валидации."""
+
+    out = await run_agent(
+        agent,
         original_prompt,
     )
 
@@ -123,6 +139,7 @@ async def generate(
                     draft=original_data,
                     field_name=field_name,
                     validation_error=str(exc),
+                    original_prompt=original_prompt,
                 )
                 field_repair_attempted = True
                 field_repair_pending = True
@@ -134,10 +151,28 @@ async def generate(
                 )
 
             invalid_response = str(
-                await run_agent(generator_agent, repair_request)
+                await run_agent(agent, repair_request)
             )
 
+async def generate_from_context(
+    context: str,
+    product_hint: str | None = None,
+    feedback: list[str] | None = None,
+) -> CardDraft:
+    """Генерация карточки на основе контекста документов."""
 
+    log.info("step_rag_generate_start")
+
+    original_prompt = rag_generator_prompt(
+        context=context,
+        product_hint=product_hint,
+        feedback=feedback,
+    )
+
+    return await _generate_with_healing(
+        rag_generator_agent,
+        original_prompt,
+    )
 
 async def critique(
     facts: SupplierFacts,
@@ -148,6 +183,30 @@ async def critique(
     out = await run_agent(
         critic_agent,
         critic_prompt(facts, draft),
+    )
+
+    if isinstance(out, CritiqueReport):
+        return out
+
+    return CritiqueReport.model_validate_json(
+        _ensure_json(out)
+    )
+async def critique_from_context(
+    context: str,
+    draft: CardDraft,
+    product_hint: str | None = None,
+) -> CritiqueReport:
+    """Проверка карточки на основе контекста документов."""
+
+    log.info("step_rag_critique_start")
+
+    out = await run_agent(
+        rag_critic_agent,
+        rag_critic_prompt(
+            context=context,
+            draft=draft,
+            product_hint=product_hint,
+        ),
     )
 
     if isinstance(out, CritiqueReport):

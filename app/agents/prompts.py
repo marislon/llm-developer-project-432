@@ -197,9 +197,11 @@ def field_repair_prompt(
     draft: dict,
     field_name: str,
     validation_error: str,
+    original_prompt: str | None = None,
 ) -> str:
     """Запросить исправление только одного поля карточки."""
-    return (
+
+    prompt = (
         "Перед тобой текущий черновик карточки:\n"
         + json.dumps(draft, ensure_ascii=False, indent=2)
         + "\n\nИсправь только поле: "
@@ -210,6 +212,16 @@ def field_repair_prompt(
         "Верни JSON-объект только с исправленным полем, "
         "без markdown и пояснений."
     )
+
+    if original_prompt:
+        prompt = (
+            "Исходное задание и данные:\n"
+            + original_prompt
+            + "\n\n"
+            + prompt
+        )
+
+    return prompt
 
 def critic_prompt(
     facts: SupplierFacts,
