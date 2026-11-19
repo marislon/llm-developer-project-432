@@ -12,6 +12,7 @@ class SearchFilters:
     section: str | None = None
     article: str | None = None
     brand: str | None = None
+    document_ids: list[str] | None = None
 
 def build_filter_conditions(
     filters: SearchFilters | None,
@@ -28,7 +29,9 @@ def build_filter_conditions(
         if value is not None:
             conditions.append(f"AND {field} = %s")
             params.append(value)
-
+    if filters.document_ids is not None:
+        conditions.append("AND document_id = ANY(%s)")
+        params.append(filters.document_ids)
     return " ".join(conditions), params
 
 def create_fragment(

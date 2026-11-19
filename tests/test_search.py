@@ -133,3 +133,64 @@ def test_vector_search_threshold(search_data):
     assert len(results) == 1
     assert results[0]["id"] == ids["semantic"]
     assert results[0]["score"] == pytest.approx(1.0)
+
+def test_hybrid_search_multiple_documents(search_data):
+    conn, first_document_id, ids = search_data
+
+    document_ids = [first_document_id]
+    expected_ids = set(ids.values())
+    query_vector = [1.0, 0.0] + [0.0] * 766
+
+    for selected in (True, False):
+        document_id = str(uuid.uuid4())
+        fragment_id = str(uuid.uuid4())
+
+        conn.execute(
+            """
+            INSERT INTO documents (
+                id, filename, ext, size_bytes,
+                sha256, storage_path, status
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                document_id,
+                "test_multiple.docx",
+                ".docx",
+                100,
+                uuid.uuid4().hex,
+                "data/test_multiple.docx",
+                "indexed",
+            ),
+        )
+
+        create_fragment(
+            conn=conn,
+            fragment_id=fragment_id,
+            document_id=document_id,
+            ord=0,
+            page=1,
+            section="Характеристики",
+            text="Электрический чайник",
+        )
+
+        update_embeddings(
+            conn,
+            [(fragment_id, query_vector)],
+        )
+
+        if selected:
+            document_ids.append(document_id)
+            expected_ids.add(fragment_id)
+
+    results = search_hybrid(
+        conn,
+        query="чайник",
+        query_embedding=query_vector,
+        similarity_threshold=0.5,
+        filters=SearchFilters(document_ids=document_ids),
+    )
+
+    assert len(results) == 4
+    assert {row["id"] for row in results} == expected_ids
+    assert {row["document_id"] for row in results} == set(document_ids)
