@@ -26,14 +26,31 @@ class SeoBlock(BaseModel):
     )
 
 class SourceReference(BaseModel):
-    url: str = Field(
+    url: str | None = Field(
+        default=None,
         min_length=1,
         description="Адрес источника информации",
     )
+
+    fragment_id: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Идентификатор фрагмента документа",
+    )
+
     description: str | None = Field(
         default=None,
-        description="Описание источника",
+        description="Утверждение, подтверждаемое источником",
     )
+
+    @model_validator(mode="after")
+    def check_source(self):
+        if not self.url and not self.fragment_id:
+            raise ValueError(
+                "Источник должен содержать url или fragment_id"
+            )
+
+        return self
 
 class CardDraft(BaseModel):
     """Результат generator-агента: черновик карточки товара."""
@@ -99,7 +116,10 @@ class CritiqueReport(BaseModel):
         description="Список проблем: заголовок длиннее 60 символов, "
         "выдуманные характеристики, пустые поля и т.п.",
     )
-
+    sources: list[SourceReference] = Field(
+        default_factory=list,
+        description="Источники, использованные при проверке карточки",
+    )
 
 class JobIn(BaseModel):
     supplier_text: str
