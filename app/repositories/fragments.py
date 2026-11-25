@@ -288,3 +288,23 @@ def get_document_fragments_without_embeddings(
         )
 
         return cur.fetchall()
+
+def get_existing_fragment_ids(
+    conn: psycopg.Connection,
+    fragment_ids: list[str],
+) -> set[str]:
+    """Получить идентификаторы существующих фрагментов."""
+    if not fragment_ids:
+        return set()
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id
+            FROM fragments
+            WHERE id = ANY(%s)
+            """,
+            (fragment_ids,),
+        )
+
+        return {row[0] for row in cur.fetchall()}

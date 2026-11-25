@@ -13,6 +13,7 @@ from app.services.steps import (
     generate,
     generate_from_context,
 )
+from app.services.validation import validate_sources
 
 log = get_logger(__name__)
 
@@ -68,12 +69,47 @@ async def run_rag_pipeline(
             product_hint=product_hint,
             feedback=feedback or None,
         )
+        source_errors = await asyncio.to_thread(
+            validate_sources,
+            conn,
+            draft.sources,
+            context.fragment_ids,
+        )
+
+        if source_errors:
+            feedback = source_errors
+
+            log.info(
+                "rag_generator_invalid_sources",
+                attempt=attempt,
+                issues=feedback,
+            )
+
+            continue
 
         report = await critique_from_context(
             context=context.text,
             draft=draft,
             product_hint=product_hint,
         )
+
+        source_errors = await asyncio.to_thread(
+            validate_sources,
+            conn,
+            report.sources,
+            context.fragment_ids,
+        )
+
+        if source_errors:
+            feedback = report.issues + source_errors
+
+            log.info(
+                "rag_critic_invalid_sources",
+                attempt=attempt,
+                issues=feedback,
+            )
+
+            continue
 
         if report.verdict == "approve":
             log.info("rag_pipeline_approved", attempts=attempt)
