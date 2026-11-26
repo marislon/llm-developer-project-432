@@ -11,11 +11,15 @@ from app.core.db import pool
 from app.core.logging import get_logger, setup_logging
 from app.temporal.activities import (
     critique_activity,
+    critique_from_context_activity,
     extract_activity,
     generate_activity,
+    generate_from_context_activity,
     index_document_activity,
     process_document_activity,
+    retrieve_context_activity,
     update_job_status_activity,
+    validate_sources_activity,
 )
 from app.temporal.workflows import (
     CardWorkflow,
@@ -45,6 +49,10 @@ async def main():
                 update_job_status_activity,
                 process_document_activity,
                 index_document_activity,
+                retrieve_context_activity,
+                generate_from_context_activity,
+                validate_sources_activity,
+                critique_from_context_activity,
             ],
         )
         log.info("temporal_worker_started", task_queue=settings.temporal_task_queue)

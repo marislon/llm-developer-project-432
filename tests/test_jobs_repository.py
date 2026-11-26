@@ -137,3 +137,130 @@ def test_concurrent_job_idempotency(db_pool):
                 "DELETE FROM jobs WHERE idempotency_key = %s",
                 (key,),
             )
+
+def test_update_job_attempts(db_pool):
+    from app.repositories.jobs import (
+        create_job_with_connection,
+        get_job_by_id,
+        set_status,
+        update_job_status,
+    )
+
+    job_id, _ = create_job_with_connection(
+        {"supplier_text": "Тест количества попыток"},
+        None,
+    )
+
+    try:
+        update_job_status(
+            job_id,
+            "generating",
+            attempts=2,
+        )
+
+        job = get_job_by_id(job_id)
+
+        assert job is not None
+        assert job["status"] == "generating"
+        assert job["attempts"] == 2
+
+        # Повторное выполнение операции.
+        update_job_status(
+            job_id,
+            "generating",
+            attempts=2,
+        )
+
+        job = get_job_by_id(job_id)
+
+        assert job is not None
+        assert job["attempts"] == 2
+
+        # Обновление статуса без изменения счётчика.
+        update_job_status(job_id, "critiquing")
+
+        job = get_job_by_id(job_id)
+
+        assert job is not None
+        assert job["status"] == "critiquing"
+        assert job["attempts"] == 2
+
+        # Проверка обратной совместимости.
+        with db_pool.connection() as conn:
+            set_status(
+                conn,
+                job_id,
+                "generating",
+                bump_attempts=True,
+            )
+
+        job = get_job_by_id(job_id)
+
+        assert job is not None
+        assert job["attempts"] == 3
+
+    finally:
+        with db_pool.connection() as conn:
+            conn.execute(
+                "DELETE FROM jobs WHERE id = %s",
+                (job_id,),
+            )
+
+
+@pytest.mark.parametrize(
+    "attempts,bump_attempts,error_message",
+    [
+        (
+            -1,
+            False,
+            "Количество попыток не может быть отрицательным",
+        ),
+        (
+            2,
+            True,
+            "Нельзя одновременно задавать attempts и bump_attempts",
+        ),
+    ],
+)
+def test_invalid_job_attempts(
+    db_pool,
+    attempts,
+    bump_attempts,
+    error_message,
+):
+    from app.repositories.jobs import (
+        create_job_with_connection,
+        get_job_by_id,
+        set_status,
+    )
+
+    job_id, _ = create_job_with_connection(
+        {"supplier_text": "Тест некорректных попыток"},
+        None,
+    )
+
+    try:
+        with db_pool.connection() as conn, pytest.raises(
+            ValueError,
+            match=error_message,
+        ):
+            set_status(
+                conn,
+                job_id,
+                "generating",
+                attempts=attempts,
+                bump_attempts=bump_attempts,
+            )
+
+        job = get_job_by_id(job_id)
+
+        assert job is not None
+        assert job["status"] == "pending"
+        assert job["attempts"] == 0
+
+    finally:
+        with db_pool.connection() as conn:
+            conn.execute(
+                "DELETE FROM jobs WHERE id = %s",
+                (job_id,),
+            )

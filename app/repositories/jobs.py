@@ -83,6 +83,7 @@ def set_status(
     result: CardDraft | None = None,
     error: str | None = None,
     bump_attempts: bool = False,
+    attempts: int | None = None,
 ) -> None:
     sets = ["status = %s", "updated_at = %s"]
     args: list = [status, _now()]
@@ -95,7 +96,18 @@ def set_status(
         sets.append("error = %s")
         args.append(error)
 
-    if bump_attempts:
+    if attempts is not None and bump_attempts:
+        raise ValueError(
+            "Нельзя одновременно задавать attempts и bump_attempts"
+        )
+
+    if attempts is not None:
+        if attempts < 0:
+            raise ValueError("Количество попыток не может быть отрицательным")
+
+        sets.append("attempts = %s")
+        args.append(attempts)
+    elif bump_attempts:
         sets.append("attempts = attempts + 1")
 
     args.append(job_id)
@@ -161,6 +173,7 @@ def update_job_status(
     *,
     result: CardDraft | None = None,
     error: str | None = None,
+    attempts: int | None = None,
 ) -> None:
     with connection() as conn:
         set_status(
@@ -169,4 +182,5 @@ def update_job_status(
             status,
             result=result,
             error=error,
+            attempts=attempts,
         )
