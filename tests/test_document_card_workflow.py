@@ -1,9 +1,10 @@
+import asyncio
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from temporalio import activity
-from temporalio.client import WorkflowFailureError
+from temporalio.client import WorkflowExecutionStatus, WorkflowFailureError
 from temporalio.exceptions import ApplicationError
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
@@ -12,6 +13,24 @@ from app.repositories import jobs as jobs_repo
 from app.schemas import CardDraft, CritiqueReport, SourceReference
 from app.temporal.activities import update_job_status_activity
 from app.temporal.workflows import DocumentCardWorkflow
+
+
+async def wait_for_job_status(
+    job_id: str,
+    expected_status: str,
+    timeout: float = 30.0,
+) -> dict:
+    async with asyncio.timeout(timeout):
+        while True:
+            saved_job = jobs_repo.get_job_by_id(job_id)
+
+            if (
+                saved_job is not None
+                and saved_job["status"] == expected_status
+            ):
+                return saved_job
+
+            await asyncio.sleep(0.1)
 
 
 async def get_status_history(handle, data_converter) -> list[str]:
@@ -177,12 +196,12 @@ async def mock_critique_from_context_activity(
     "product_hint, expected_status, expected_confidence, expected_attempts",
     [
         ("Электрический чайник", "approved", 0.85, 1),
-        ("low_confidence", "waiting_for_human", 0.5, 1),
+        ("low_confidence", "approved", 0.5, 1),
         ("invalid_source", "approved", 0.85, 2),
         ("invalid_critic_source", "approved", 0.85, 2),
         ("critic_rework", "approved", 0.85, 2),
-        ("persistent_invalid_source", "waiting_for_human", 0.85, 3),
-        ("persistent_critic_rework", "waiting_for_human", 0.85, 3),
+        ("persistent_invalid_source", "rejected", 0.85, 3),
+        ("persistent_critic_rework", "approved", 0.85, 3),
     ],
     ids=[
         "approved",
@@ -238,7 +257,51 @@ async def test_document_card_workflow(
                     task_queue="document-card-test",
                 )
 
-                await handle.result()
+                if product_hint in (
+                    "low_confidence",
+                    "persistent_invalid_source",
+                    "persistent_critic_rework",
+                ):
+                    await wait_for_job_status(
+                        job_id,
+                        "waiting_for_human",
+                    )
+
+                    description = await handle.describe()
+                    assert description.status == WorkflowExecutionStatus.RUNNING
+                    if product_hint == "persistent_invalid_source":
+                        await handle.signal(
+                            DocumentCardWorkflow.submit_human_decision,
+                            "approve",
+                        )
+                        with pytest.raises(TimeoutError):
+                            await asyncio.wait_for(
+                                handle.result(),
+                                timeout=2.0,
+                            )
+
+                        description = await handle.describe()
+                        assert description.status == WorkflowExecutionStatus.RUNNING
+
+                        saved_job = jobs_repo.get_job_by_id(job_id)
+                        assert saved_job is not None
+                        assert saved_job["status"] == "waiting_for_human"
+
+                    decision = (
+                        "reject"
+                        if product_hint == "persistent_invalid_source"
+                        else "approve"
+                    )
+
+                    await handle.signal(
+                        DocumentCardWorkflow.submit_human_decision,
+                        decision,
+                    )
+
+                await asyncio.wait_for(
+                    handle.result(),
+                    timeout=30.0,
+                )
 
                 statuses = await get_status_history(
                     handle,
@@ -263,6 +326,7 @@ async def test_document_card_workflow(
                         "critiquing",
                         "validating_sources",
                         "waiting_for_human",
+                        "approved",
                     ]
 
                 elif product_hint == "invalid_source":
@@ -308,6 +372,7 @@ async def test_document_card_workflow(
                         "generating",
                         "validating_sources",
                         "waiting_for_human",
+                        "rejected",
                     ]
 
                 elif product_hint == "persistent_critic_rework":
@@ -328,6 +393,7 @@ async def test_document_card_workflow(
                         "critiquing",
                         "validating_sources",
                         "waiting_for_human",
+                        "approved",
                     ]
 
                 saved_job = jobs_repo.get_job_by_id(job_id)
@@ -337,8 +403,6 @@ async def test_document_card_workflow(
                 assert saved_job["attempts"] == expected_attempts
                 if product_hint == "persistent_invalid_source":
                     assert saved_job["error"] == "Фрагмент fake-id отсутствует в контексте"
-                elif product_hint == "persistent_critic_rework":
-                    assert saved_job["error"] == "Необходимо уточнить объем в заголовке"
                 else:
                     assert saved_job["error"] == ""
 

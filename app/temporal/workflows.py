@@ -167,6 +167,27 @@ class DocumentWorkflow:
 class DocumentCardWorkflow:
     """Генерация карточки товара по документам поставщика."""
 
+    def __init__(self) -> None:
+        self._human_decision: str | None = None
+        self._waiting_for_human = False
+        self._can_human_approve = False
+
+    @workflow.signal
+    async def submit_human_decision(self, decision: str) -> None:
+        if not self._waiting_for_human:
+            return
+
+        if self._human_decision is not None:
+            return
+
+        if decision not in ("approve", "reject"):
+            return
+
+        if decision == "approve" and not self._can_human_approve:
+            return
+
+        self._human_decision = decision
+
     async def _set_job_status(
         self,
         job_id: str,
@@ -187,6 +208,46 @@ class DocumentCardWorkflow:
             start_to_close_timeout=timedelta(seconds=30),
             retry_policy=RetryPolicy(maximum_attempts=3),
         )
+
+    async def _wait_for_human(
+        self,
+        job_id: str,
+        draft_json: str,
+        error: str,
+        attempts: int,
+        can_approve: bool,
+    ) -> None:
+        self._can_human_approve = can_approve
+        self._waiting_for_human = True
+
+        await self._set_job_status(
+            job_id,
+            "waiting_for_human",
+            result_json=draft_json,
+            error=error,
+            attempts=attempts,
+        )
+
+        await workflow.wait_condition(
+            lambda: self._human_decision is not None
+        )
+
+        self._waiting_for_human = False
+
+        status = (
+            "approved"
+            if self._human_decision == "approve"
+            else "rejected"
+        )
+
+        await self._set_job_status(
+            job_id,
+            status,
+            result_json=draft_json,
+            error="" if status == "approved" else error,
+            attempts=attempts,
+        )
+
     @workflow.run
     async def run(
         self,
@@ -216,8 +277,10 @@ class DocumentCardWorkflow:
 
         max_attempts = 3
         feedback: list[str] = []
+        sources_valid = False
 
         for attempt in range(1, max_attempts + 1):
+            sources_valid = False
             await self._set_job_status(
                 job_id,
                 "generating",
@@ -353,21 +416,24 @@ class DocumentCardWorkflow:
                     )
 
                 continue
-
+            sources_valid = True
             if report["verdict"] == "approve":
-                status = (
-                    "waiting_for_human"
-                    if draft["confidence"] < 0.7
-                    else "approved"
-                )
-
-                await self._set_job_status(
-                    job_id,
-                    status,
-                    result_json=draft_json,
-                    error="",
-                    attempts=attempt,
-                )
+                if draft["confidence"] < 0.7:
+                    await self._wait_for_human(
+                        job_id=job_id,
+                        draft_json=draft_json,
+                        error="",
+                        attempts=attempt,
+                        can_approve=True,
+                    )
+                else:
+                    await self._set_job_status(
+                        job_id,
+                        "approved",
+                        result_json=draft_json,
+                        error="",
+                        attempts=attempt,
+                    )
 
                 return
 
@@ -380,10 +446,10 @@ class DocumentCardWorkflow:
                     error="; ".join(feedback),
                 )
 
-        await self._set_job_status(
-            job_id,
-            "waiting_for_human",
-            result_json=draft_json,
+        await self._wait_for_human(
+            job_id=job_id,
+            draft_json=draft_json,
             error="; ".join(feedback),
             attempts=max_attempts,
+            can_approve=sources_valid,
         )

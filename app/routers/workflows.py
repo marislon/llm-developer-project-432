@@ -13,6 +13,37 @@ router = APIRouter(tags=["workflows"])
 async def _client() -> Client:
     return await Client.connect(settings.temporal_host)
 
+async def _submit_human_decision(
+    wf_id: str,
+    decision: str,
+) -> dict:
+    job = jobs_repo.get_job_by_id(wf_id)
+
+    if job is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Job not found",
+        )
+
+    if job["status"] != "waiting_for_human":
+        raise HTTPException(
+            status_code=409,
+            detail="Job is not waiting for human decision",
+        )
+
+    client = await _client()
+    handle = client.get_workflow_handle(wf_id)
+
+    await handle.signal(
+        "submit_human_decision",
+        decision,
+    )
+
+    return {
+        "id": wf_id,
+        "decision": decision,
+        "status": "accepted",
+    }
 
 @router.post("/workflows", status_code=202)
 async def start_workflow(
@@ -60,16 +91,14 @@ async def workflow_status(wf_id: str):
     raise NotImplementedError("workflow_status")
 
 
-@router.post("/workflows/{wf_id}/approve")
+@router.post("/workflows/{wf_id}/approve", status_code=202)
 async def approve(wf_id: str):
-    # TODO(шаг 4): await client.get_workflow_handle(wf_id).signal("approve")
-    raise NotImplementedError("approve")
+    return await _submit_human_decision(wf_id, "approve")
 
 
-@router.post("/workflows/{wf_id}/request-changes")
-async def request_changes(wf_id: str):
-    # TODO(шаг 4): await client.get_workflow_handle(wf_id).signal("request_changes")
-    raise NotImplementedError("request_changes")
+@router.post("/workflows/{wf_id}/reject", status_code=202)
+async def reject(wf_id: str):
+    return await _submit_human_decision(wf_id, "reject")
 
 
 @router.get("/workflows/{wf_id}/result")
