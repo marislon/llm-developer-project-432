@@ -85,10 +85,20 @@ async def start_workflow(
 
 @router.get("/workflows/{wf_id}")
 async def workflow_status(wf_id: str):
-    # TODO(шаг 4): handle = client.get_workflow_handle(wf_id);
-    #   await handle.describe() → run_status; await handle.query("current_status") → status.
-    #   Ошибка → HTTPException(404, "workflow not found")
-    raise NotImplementedError("workflow_status")
+    job = jobs_repo.get_job_by_id(wf_id)
+
+    if job is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Job not found",
+        )
+
+    return {
+        "id": wf_id,
+        "status": job["status"],
+        "attempts": job["attempts"],
+        "error": job["error"],
+    }
 
 
 @router.post("/workflows/{wf_id}/approve", status_code=202)
@@ -103,5 +113,28 @@ async def reject(wf_id: str):
 
 @router.get("/workflows/{wf_id}/result")
 async def workflow_result(wf_id: str):
-    # TODO(шаг 4): result = await handle.result() (упадёт, если не завершён → 409)
-    raise NotImplementedError("workflow_result")
+    job = jobs_repo.get_job_by_id(wf_id)
+
+    if job is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Job not found",
+        )
+
+    if job["status"] not in ("waiting_for_human", "approved"):
+        raise HTTPException(
+            status_code=409,
+            detail="Job result is not available",
+        )
+
+    if job["result"] is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Job result is not available",
+        )
+
+    return {
+        "id": wf_id,
+        "status": job["status"],
+        "result": job["result"],
+    }
