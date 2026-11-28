@@ -169,6 +169,12 @@ async def generate_from_context(
         feedback=feedback,
     )
 
+    log.info(
+        "rag_prompt_size",
+        context_chars=len(context),
+        prompt_chars=len(original_prompt),
+    )
+
     return await _generate_with_healing(
         rag_generator_agent,
         original_prompt,

@@ -295,7 +295,7 @@ class DocumentCardWorkflow:
                         product_hint,
                         feedback or None,
                     ],
-                    start_to_close_timeout=timedelta(seconds=180),
+                    start_to_close_timeout=timedelta(seconds=600),
                     retry_policy=RetryPolicy(maximum_attempts=3),
                 )
             except ActivityError as exc:
@@ -363,7 +363,7 @@ class DocumentCardWorkflow:
                         draft_json,
                         product_hint,
                     ],
-                    start_to_close_timeout=timedelta(seconds=180),
+                    start_to_close_timeout=timedelta(seconds=600),
                     retry_policy=RetryPolicy(maximum_attempts=3),
                 )
             except ActivityError as exc:
